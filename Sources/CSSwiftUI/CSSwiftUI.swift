@@ -5,16 +5,28 @@ import SwiftUI
 
 
 public struct CSSFileModifier: ViewModifier {
-    @State private var sheet: CSSStyleSheet
+    @State private var sheet = CSSStyleSheet()
+    @State private var didLoad = false
+    
+    private let filename: String
+    private let bundle: Bundle
 
     public init(named filename: String, bundle: Bundle = .main) {
-        let s = CSSStyleSheet()
-        s.load(named: filename, bundle: bundle)
-        _sheet = State(initialValue: s)
+        self.filename = filename
+        self.bundle = bundle
     }
 
     public func body(content: Content) -> some View {
-        content.environment(sheet)
+        content
+            .task {
+                // @State properties are MainActor-isolated, preventing race conditions
+                guard !didLoad else { return }
+                didLoad = true
+                let s = CSSStyleSheet()
+                s.load(named: filename, bundle: bundle)
+                sheet = s
+            }
+            .environment(sheet)
     }
 }
   
@@ -57,6 +69,12 @@ private struct SmartImage: View {
             return NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
         }
         return false
+        #elseif os(watchOS)
+        // On watchOS, we can use SwiftUI's Image(systemName:) which works with SF Symbols
+        // Since we can't check availability at runtime without UIKit/AppKit, we use a heuristic:
+        // assume names with dots are SF Symbols (common pattern like "star.fill", "heart.fill")
+        // Note: This may produce false positives for file names or other dotted strings
+        return name.contains(".")
         #else
         return false
         #endif

@@ -108,7 +108,13 @@ public struct CSSStyle {
 
     static func parseBox(_ value: String) -> EdgeInsets? {
         let parts = value.split(separator: " ").map { String($0) }
-        let values = parts.compactMap { parseSize($0) }
+        var values: [CGFloat] = []
+        for part in parts {
+            guard let size = parseSize(part) else {
+                return nil
+            }
+            values.append(size)
+        }
         
         // CSS: top right bottom left
         // SwiftUI: top leading bottom trailing
@@ -142,7 +148,14 @@ public struct CSSStyle {
 
     static func parseCornerRadii(_ value: String) -> RectangleCornerRadii? {
         let parts = value.split(separator: " ").map { String($0) }
-        let values = parts.compactMap { parseSize($0) }
+        var values: [CGFloat] = []
+        for part in parts {
+            guard let size = parseSize(part) else {
+                // If any component fails to parse, reject the entire shorthand
+                return nil
+            }
+            values.append(size)
+        }
         
         // CSS Order: Top-Left, Top-Right, Bottom-Right, Bottom-Left
         // SwiftUI Use: topLeading, topTrailing, bottomTrailing, bottomLeading

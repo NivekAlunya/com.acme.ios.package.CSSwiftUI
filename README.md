@@ -114,7 +114,7 @@ CSSwiftUI supports a wide range of standard CSS properties, along with some plat
 - **`background-image`**: Bundle image name or SF Symbol name (e.g., `star.fill`).
 - **`background-material`**: SwiftUI Materials.
   - `ultra-thin-material`, `thin-material`, `regular-material`, `thick-material`, `ultra-thick-material`, `bar`.
-- **`border-width`**: Width of the border stroke. Supports 1, 2, or 4 values.
+- **`border-width`**: Width of the border stroke. Currently supports a single uniform value applied to all sides. Multi-value syntax (1/2/4 values) is parsed but only the first value is used.
 - **`border-color`**: Color of the border.
 - **`border-radius`**: Corner radius. Supports 1, 2, 3, or 4 values for individual corners (TL, TR, BR, BL).
 
