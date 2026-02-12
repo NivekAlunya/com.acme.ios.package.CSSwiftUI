@@ -19,6 +19,7 @@ public struct CSSFileModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .task {
+                // @State properties are MainActor-isolated, preventing race conditions
                 guard !didLoad else { return }
                 didLoad = true
                 let s = CSSStyleSheet()
@@ -70,8 +71,9 @@ private struct SmartImage: View {
         return false
         #elseif os(watchOS)
         // On watchOS, we can use SwiftUI's Image(systemName:) which works with SF Symbols
-        // Since we can't check availability at runtime without UIKit/AppKit, assume names
-        // with dots are SF Symbols (common pattern like "star.fill", "heart.fill")
+        // Since we can't check availability at runtime without UIKit/AppKit, we use a heuristic:
+        // assume names with dots are SF Symbols (common pattern like "star.fill", "heart.fill")
+        // Note: This may produce false positives for file names or other dotted strings
         return name.contains(".")
         #else
         return false
