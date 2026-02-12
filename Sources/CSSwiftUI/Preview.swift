@@ -15,7 +15,7 @@ struct Preview: View {
 
         .system-colors {
             background-color: system-background;
-            color: cyan;
+            color: system-green;
             padding: 20px;
             border-radius: 10px;
             border-width: 2px;
@@ -56,6 +56,9 @@ struct Preview: View {
         """)
         return s
     }()
+    init() {
+        self.sheet.define("title", "font-size: 24; font-weight: bold;background-color: yellow;")
+    }
     
     var body: some View {
         ScrollView {
@@ -65,7 +68,12 @@ struct Preview: View {
                     .cssClass("bg-image-system")
                 
                 Divider()
+
+                Text("TITLE") // Placeholder spacing
+                    .cssClass("title typography-demo")
                 
+                Divider()
+
                 // System Colors
                 Text("System Colors \n(systemBackground, label)")
                     .cssClass("system-colors")

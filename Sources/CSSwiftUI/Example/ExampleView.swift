@@ -63,6 +63,8 @@ public struct ExampleView: View {
             border-radius: 20px 0px 20px 0px;
             padding: 15px;
             background-color: system-gray6;
+            font-size:title2; 
+            font-weight: ultraLight;
         }
         """)
         return s
