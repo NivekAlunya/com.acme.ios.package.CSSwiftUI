@@ -65,7 +65,9 @@ public class CSSStyleSheet {
             let url  = bundle.url(forResource: name, withExtension: ext),
             let text = try? String(contentsOf: url, encoding: .utf8)
         else {
+            #if DEBUG
             print("CSSStyleSheet: could not load '\(filename)'")
+            #endif
             return
         }
         parse(text)

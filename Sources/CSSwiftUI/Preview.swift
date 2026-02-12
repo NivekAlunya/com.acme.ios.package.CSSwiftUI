@@ -15,7 +15,7 @@ struct Preview: View {
 
         .system-colors {
             background-color: system-background;
-            color: syeren;
+            color: cyan;
             padding: 20px;
             border-radius: 10px;
             border-width: 2px;
