@@ -83,14 +83,34 @@ jobs:
             }
           ' > request.json
 
-          # 5. Call Gemini 3.6 Flash directly
-          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
-            -H "Content-Type: application/json" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}" \
-            -d @request.json)
+          # 5. Call API with automatic retry and model fallback
+          MODELS=("gemini-3.6-flash" "gemini-3.8-flash")
+          SUCCESS=false
 
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "❌ API request failed with HTTP $HTTP_STATUS:"
+          for MODEL in "${MODELS[@]}"; do
+            echo "Attempting review with $MODEL..."
+            for ATTEMPT in 1 2 3; do
+              HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+                -H "Content-Type: application/json" \
+                "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}" \
+                -d @request.json)
+
+              if [ "$HTTP_STATUS" -eq 200 ]; then
+                echo "✅ Success with $MODEL on attempt $ATTEMPT!"
+                SUCCESS=true
+                break 2
+              elif [ "$HTTP_STATUS" -eq 503 ] || [ "$HTTP_STATUS" -eq 429 ]; then
+                echo "Model $MODEL busy (HTTP $HTTP_STATUS), retrying in $((ATTEMPT * 3))s..."
+                sleep $((ATTEMPT * 3))
+              else
+                echo "Model $MODEL returned HTTP $HTTP_STATUS, trying next model..."
+                break
+              fi
+            done
+          done
+
+          if [ "$SUCCESS" != "true" ]; then
+            echo "❌ All API attempts failed:"
             cat response.json
             exit 1
           fi
