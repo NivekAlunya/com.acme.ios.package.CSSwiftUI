@@ -9,20 +9,27 @@ import SwiftUI
 
 /// A view modifier that loads a CSS stylesheet from a bundle and provides it to the view hierarchy via environment.
 public struct CSSFileModifier: ViewModifier {
-    @State private var sheet: CSSStyleSheet
+    @State private var sheet = CSSStyleSheet()
+    private let filename: String
+    private let bundle: Bundle
 
-    /// Initializes the modifier and immediately loads the CSS file to prevent unstyled content flashes.
+    /// Initializes the modifier with the specified stylesheet name and bundle.
+    ///
+    /// File loading is deferred to `.task(id:)` to keep view initializers lightweight and avoid main-thread hitches.
     /// - Parameters:
     ///   - filename: The name of the CSS file (with or without `.css` extension).
     ///   - bundle: The resource bundle where the file is stored (defaults to `.main`).
     public init(named filename: String, bundle: Bundle = .main) {
-        let s = CSSStyleSheet()
-        s.load(named: filename, bundle: bundle)
-        _sheet = State(initialValue: s)
+        self.filename = filename
+        self.bundle = bundle
     }
 
     public func body(content: Content) -> some View {
-        content.environment(sheet)
+        content
+            .environment(sheet)
+            .task(id: filename) {
+                await sheet.load(named: filename, bundle: bundle)
+            }
     }
 }
 

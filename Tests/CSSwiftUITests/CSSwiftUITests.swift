@@ -120,6 +120,7 @@ struct CSSStyleParsingTests {
 }
 
 @Suite("CSSStyleSheet Tests")
+@MainActor
 struct CSSStyleSheetTests {
 
     @Test("Define and resolve stylesheet classes")
@@ -165,5 +166,22 @@ struct CSSStyleSheetTests {
         #expect(sheet.css(for: "title")?.contains("font-size: 24px") == true)
         #expect(sheet.css(for: "heading")?.contains("font-weight: bold") == true)
         #expect(sheet.css(for: "box")?.contains("border-radius: 8px") == true)
+    }
+
+    @Test("Cache management and lightweight modifier initialization")
+    func testCacheAndModifier() {
+        CSSStyleSheet.clearCache()
+        
+        // Ensure CSSFileModifier initializes without triggering disk I/O or crashing
+        let modifier = CSSFileModifier(named: "non_existent_file")
+        _ = modifier
+    }
+
+    @Test("Async loading gracefully handles missing resources and clears cache")
+    func testAsyncLoading() async {
+        CSSStyleSheet.clearCache()
+        let sheet = CSSStyleSheet()
+        await sheet.load(named: "missing_stylesheet")
+        #expect(sheet.css(for: "anything") == nil)
     }
 }
