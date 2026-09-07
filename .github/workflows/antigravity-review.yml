@@ -33,7 +33,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # 1. Compute the git diff against target branch
+          # 1. Compute git diff against target branch
           git diff "$PR_BASE...HEAD" > pr_diff.patch
 
           if [ ! -s pr_diff.patch ]; then
@@ -83,7 +83,7 @@ jobs:
             }
           ' > request.json
 
-          # 5. Call API directly (no interactive login or CLI required)
+          # 5. Call API directly via curl with your GEMINI_API_KEY
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -H "Content-Type: application/json" \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
@@ -109,7 +109,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Check if an Antigravity review comment already exists on this PR
           COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/$PR_NUMBER/comments \
             --jq '.[] | select(.body | contains("<!-- antigravity-pr-reviewer -->")) | .id' | head -n 1)
 
