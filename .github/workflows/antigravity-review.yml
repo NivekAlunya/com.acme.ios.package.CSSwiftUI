@@ -83,10 +83,10 @@ jobs:
             }
           ' > request.json
 
-          # 5. Call API directly via curl with your GEMINI_API_KEY
+          # 5. Call Gemini 3.8 Flash directly
           HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
             -H "Content-Type: application/json" \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}" \
             -d @request.json)
 
           if [ "$HTTP_STATUS" -ne 200 ]; then
