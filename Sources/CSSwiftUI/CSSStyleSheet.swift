@@ -7,29 +7,42 @@
 
 import SwiftUI
 
+/// An observable stylesheet that parses, registers, and resolves CSS rules for SwiftUI views.
 @Observable
 public class CSSStyleSheet {
     private var classes: [String: String] = [:]
     
+    /// Creates an empty stylesheet.
     public init() {}
 
+    /// Registers a CSS declaration for a given class name.
+    /// - Parameters:
+    ///   - name: The class name (with or without a leading period, e.g. `".button"` or `"button"`).
+    ///   - css: The CSS declaration body (e.g. `"color: red; padding: 8px"`).
     public func define(_ name: String, _ css: String) {
         let key = name.hasPrefix(".") ? String(name.dropFirst()) : name
         classes[key] = css
     }
 
+    /// Retrieves the registered CSS string for the specified class name, if defined.
+    /// - Parameter name: The class name (with or without leading period).
+    /// - Returns: The merged CSS string if present.
     public func css(for name: String) -> String? {
         let key = name.hasPrefix(".") ? String(name.dropFirst()) : name
         return classes[key]
     }
 
+    /// Resolves a list of class names into a single merged CSS declaration string.
+    /// - Parameter names: Array of class names to resolve in order.
+    /// - Returns: Semicolon-separated CSS declaration string.
     public func resolved(classes names: [String]) -> String {
         names.compactMap { css(for: $0) }.joined(separator: "; ")
     }
 
     // MARK: - CSS File Parsing
 
-    /// Parse a raw CSS string and register all rules.
+    /// Parses a raw CSS stylesheet string, stripping comments and registering all class rules.
+    /// - Parameter cssText: Raw CSS content.
     public func parse(_ cssText: String) {
         // Strip /* ... */ comments
         var text = cssText
@@ -55,7 +68,10 @@ public class CSSStyleSheet {
         }
     }
 
-    /// Load and parse a CSS file from the given bundle (defaults to .main).
+    /// Loads and parses a CSS file from the given bundle.
+    /// - Parameters:
+    ///   - filename: Name of the resource file (e.g. `"styles"` or `"styles.css"`).
+    ///   - bundle: The resource bundle where the file is stored (defaults to `.main`).
     public func load(named filename: String, bundle: Bundle = .main) {
         let name = (filename as NSString).deletingPathExtension
         let ext  = (filename as NSString).pathExtension.isEmpty

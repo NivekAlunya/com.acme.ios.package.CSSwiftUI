@@ -1,0 +1,110 @@
+name: Antigravity PR Review (CLI)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: antigravity-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch Target Base Branch
+        run: |
+          git fetch origin ${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}
+
+      - name: Install Antigravity CLI (agy)
+        run: |
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate PR Diff & Review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PR_BASE: "origin/${{ github.base_ref }}"
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # 1. Compute the git diff against target branch
+          git diff "$PR_BASE...HEAD" > pr_diff.patch
+
+          if [ ! -s pr_diff.patch ]; then
+            echo "<!-- antigravity-pr-reviewer -->" > review.md
+            echo "### 🤖 Antigravity PR Review" >> review.md
+            echo "No code changes detected in this pull request." >> review.md
+            exit 0
+          fi
+
+          # 2. Guard against massive generated files/diffs (truncate to first 1500 lines if larger)
+          DIFF_LINES=$(wc -l < pr_diff.patch)
+          if [ "$DIFF_LINES" -gt 1500 ]; then
+            head -n 1500 pr_diff.patch > prompt_diff.patch
+            echo -e "\n\n... [Diff truncated: exceeded 1500 lines] ..." >> prompt_diff.patch
+          else
+            cp pr_diff.patch prompt_diff.patch
+          fi
+
+          # 3. Assemble review prompt
+          cat << 'EOF' > system_prompt.txt
+          You are a Senior DevOps & Principal Software Engineer reviewing a GitHub PR.
+          Provide a concise, high-signal code review covering:
+          1. 🛡️ Security: Hardcoded secrets, credential leaks, injection risks.
+          2. ⚠️ Logic & Reliability: Error handling, edge cases, breaking changes.
+          3. ⚡ Performance & Scalability: Inefficient loops, resource leaks.
+          4. 🧪 Testing & CI/CD: Missing tests or pipeline impacts.
+
+          Format clearly in markdown with code suggestions where applicable.
+          EOF
+
+          cat << EOF > full_prompt.txt
+          $(cat system_prompt.txt)
+
+          Pull Request: "${PR_TITLE}" (#${PR_NUMBER})
+
+          Git Diff:
+          \`\`\`diff
+          $(cat prompt_diff.patch)
+          \`\`\`
+          EOF
+
+          # 4. Execute agy non-interactively with --print mode
+          echo "<!-- antigravity-pr-reviewer -->" > review.md
+          echo "### 🤖 Antigravity Automated Code Review" >> review.md
+          echo "" >> review.md
+
+          agy --print "$(cat full_prompt.txt)" --sandbox >> review.md
+
+          echo "" >> review.md
+          echo "---" >> review.md
+          echo "*Reviewed by Antigravity CLI on commit \`${GITHUB_SHA:0:7}\`*" >> review.md
+
+      - name: Post or Update PR Comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Check if an Antigravity review comment already exists on this PR
+          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/$PR_NUMBER/comments \
+            --jq '.[] | select(.body | contains("<!-- antigravity-pr-reviewer -->")) | .id' | head -n 1)
+
+          if [ -n "$COMMENT_ID" ]; then
+            echo "Updating existing comment ID: $COMMENT_ID..."
+            gh api --method PATCH repos/${{ github.repository }}/issues/comments/$COMMENT_ID \
+              -F body=@review.md
+          else
+            echo "Posting new PR review comment..."
+            gh pr comment $PR_NUMBER --body-file review.md
+          fi

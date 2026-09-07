@@ -6,31 +6,51 @@
 //
 import SwiftUI
 
-public struct CSSStyle {
+/// Represents parsed CSS styling attributes applicable to SwiftUI views.
+public struct CSSStyle: Sendable {
 
-    public enum FontSize {
+    /// Represents the font size specified either as a dynamic SwiftUI `Font.TextStyle` or a fixed point size.
+    public enum FontSize: Sendable, Equatable {
         case textStyle(Font.TextStyle)
         case fixed(CGFloat)
     }
 
+    /// The text foreground color.
     public var foregroundColor: Color?
+    /// The background fill color.
     public var backgroundColor: Color?
+    /// The font size specification.
     public var fontSize: FontSize?
+    /// The typographic weight of the font.
     public var fontWeight: Font.Weight?
+    /// The inner padding around the view content.
     public var padding: EdgeInsets?
+    /// The outer margin around the view.
     public var margin: EdgeInsets?
+    /// Corner radii for rounding individual corners of the background.
     public var cornerRadius: RectangleCornerRadii?
+    /// Border stroke widths.
     public var borderWidth: EdgeInsets?
+    /// Border stroke color.
     public var borderColor: Color?
+    /// Image asset or system symbol name for the background.
     public var backgroundImage: String?
+    /// SwiftUI background material effect (e.g. ultraThinMaterial).
     public var backgroundMaterial: Material?
+    /// Coordinate offset applied to the view.
     public var offset: CGSize?
+    /// Absolute position of the view within its parent.
     public var position: CGPoint?
+    /// Whether the text should be rendered in italics.
     public var isItalic: Bool = false
+    /// Whether an underline decoration is applied.
     public var isUnderline: Bool = false
+    /// Whether a strikethrough (line-through) decoration is applied.
     public var isStrikethrough: Bool = false
+    /// Color of the text decoration line (underline or strikethrough).
     public var decorationColor: Color? = nil
 
+    /// Resolves the composite `Font` combining `fontSize`, `fontWeight`, and `isItalic`.
     public var font: Font? {
         guard fontSize != nil || fontWeight != nil || isItalic else { return nil }
         var base: Font
@@ -44,6 +64,8 @@ public struct CSSStyle {
         return base
     }
 
+    /// Initializes a `CSSStyle` by parsing a CSS declaration string (e.g. `"color: red; font-size: 16px"`).
+    /// - Parameter cssString: A semicolon-separated string of CSS declarations.
     public init(from cssString: String) {
         for declaration in cssString.split(separator: ";") {
             let parts = declaration
@@ -51,18 +73,19 @@ public struct CSSStyle {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             guard parts.count == 2 else { continue }
             let property = parts[0].lowercased()
-            let value    = parts[1].lowercased()
+            let rawValue = parts[1]
+            let value    = rawValue.lowercased()
             switch property {
-            case "color":                foregroundColor = Self.parseColor(value)
-            case "background-color":     backgroundColor = Self.parseColor(value)
+            case "color":                foregroundColor = Self.parseColor(rawValue)
+            case "background-color":     backgroundColor = Self.parseColor(rawValue)
             case "font-size":            fontSize        = Self.parseFontSize(value)
             case "font-weight":          fontWeight      = Self.parseFontWeight(value)
             case "padding":              padding         = Self.parseBox(value)
             case "margin":               margin          = Self.parseBox(value)
             case "border-radius":        cornerRadius    = Self.parseCornerRadii(value)
             case "border-width":         borderWidth     = Self.parseBox(value)
-            case "border-color":         borderColor     = Self.parseColor(value)
-            case "background-image":     backgroundImage = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            case "border-color":         borderColor     = Self.parseColor(rawValue)
+            case "background-image":     backgroundImage = rawValue
             case "background-material":  backgroundMaterial = Self.parseMaterial(value)
             case "offset":               offset          = Self.parseOffset(value)
             case "position":             position        = Self.parsePosition(value)
@@ -71,7 +94,7 @@ public struct CSSStyle {
                 // supports "underline", "line-through", or combined "underline line-through"
                 isUnderline      = value.contains("underline")
                 isStrikethrough  = value.contains("line-through")
-            case "text-decoration-color": decorationColor = Self.parseColor(value)
+            case "text-decoration-color": decorationColor = Self.parseColor(rawValue)
             default: break
             }
         }
@@ -273,7 +296,8 @@ public struct CSSStyle {
     // MARK: Color
 
     static func parseColor(_ value: String) -> Color? {
-        switch value {
+        let key = value.lowercased()
+        switch key {
         case "red":           return .red
         case "blue":          return .blue
         case "green":         return .green
@@ -313,6 +337,7 @@ public struct CSSStyle {
         case "systemred", "system-red":         return systemColor(name: "systemRed")
         case "systemteal", "system-teal":       return systemColor(name: "systemTeal")
         case "systemyellow", "system-yellow":   return systemColor(name: "systemYellow")
+        case "clear", "transparent": return .clear
         case "systemgray", "system-gray":       return systemColor(name: "systemGray")
         case "systemgray2", "system-gray2":     return systemColor(name: "systemGray2")
         case "systemgray3", "system-gray3":     return systemColor(name: "systemGray3")
@@ -320,8 +345,8 @@ public struct CSSStyle {
         case "systemgray5", "system-gray5":     return systemColor(name: "systemGray5")
         case "systemgray6", "system-gray6":     return systemColor(name: "systemGray6")
         default:
-            if value.hasPrefix("#")    { return parseHexColor(value) }
-            if value.hasPrefix("rgb(") { return parseRGBColor(value) }
+            if value.hasPrefix("#") { return parseHexColor(value) }
+            if key.hasPrefix("rgb(") || key.hasPrefix("rgba(") { return parseRGBColor(value) }
             return nil
         }
     }
@@ -329,9 +354,25 @@ public struct CSSStyle {
     static func parseHexColor(_ hex: String) -> Color? {
         var str = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if str.hasPrefix("#") { str.removeFirst() }
+        
         var rgb: UInt64 = 0
-        guard Scanner(string: str).scanHexInt64(&rgb) else { return nil }
+        let scanner = Scanner(string: str)
+        guard scanner.scanHexInt64(&rgb), scanner.isAtEnd else { return nil }
+        
         switch str.count {
+        case 3:
+            return Color(
+                red:   Double((rgb & 0xF00) >> 8) / 15,
+                green: Double((rgb & 0x0F0) >> 4) / 15,
+                blue:  Double( rgb & 0x00F      ) / 15
+            )
+        case 4:
+            return Color(
+                red:     Double((rgb & 0xF000) >> 12) / 15,
+                green:   Double((rgb & 0x0F00) >>  8) / 15,
+                blue:    Double((rgb & 0x00F0) >>  4) / 15,
+                opacity: Double( rgb & 0x000F       ) / 15
+            )
         case 6:
             return Color(
                 red:   Double((rgb & 0xFF0000) >> 16) / 255,
@@ -345,18 +386,25 @@ public struct CSSStyle {
                 blue:    Double((rgb & 0x0000FF00) >>  8) / 255,
                 opacity: Double( rgb & 0x000000FF        ) / 255
             )
-        default: return nil
+        default:
+            return nil
         }
     }
 
     static func parseRGBColor(_ value: String) -> Color? {
-        let nums = value
-            .replacingOccurrences(of: "rgb(", with: "")
-            .replacingOccurrences(of: ")",    with: "")
+        let clean = value
+            .replacingOccurrences(of: "rgba(", with: "")
+            .replacingOccurrences(of: "rgb(",  with: "")
+            .replacingOccurrences(of: ")",     with: "")
+        let nums = clean
             .split(separator: ",")
             .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
-        guard nums.count == 3 else { return nil }
-        return Color(red: nums[0]/255, green: nums[1]/255, blue: nums[2]/255)
+        if nums.count == 3 {
+            return Color(red: nums[0]/255, green: nums[1]/255, blue: nums[2]/255)
+        } else if nums.count == 4 {
+            return Color(red: nums[0]/255, green: nums[1]/255, blue: nums[2]/255, opacity: nums[3])
+        }
+        return nil
     }
 
     static func systemColor(name: String) -> Color? {
