@@ -84,7 +84,7 @@ jobs:
           ' > request.json
 
           # 5. Call API with automatic retry and model fallback
-          MODELS=("gemini-3.6-flash" "gemini-3.8-flash")
+          MODELS=("gemini-3.7-flash" "gemini-3.8-flash")
           SUCCESS=false
 
           for MODEL in "${MODELS[@]}"; do
