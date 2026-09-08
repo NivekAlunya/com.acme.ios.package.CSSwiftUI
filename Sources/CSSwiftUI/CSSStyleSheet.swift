@@ -7,29 +7,43 @@
 
 import SwiftUI
 
+/// An observable stylesheet that parses, registers, and resolves CSS rules for SwiftUI views.
+@MainActor
 @Observable
 public class CSSStyleSheet {
     private var classes: [String: String] = [:]
     
+    /// Creates an empty stylesheet.
     public init() {}
 
+    /// Registers a CSS declaration for a given class name.
+    /// - Parameters:
+    ///   - name: The class name (with or without a leading period, e.g. `".button"` or `"button"`).
+    ///   - css: The CSS declaration body (e.g. `"color: red; padding: 8px"`).
     public func define(_ name: String, _ css: String) {
         let key = name.hasPrefix(".") ? String(name.dropFirst()) : name
         classes[key] = css
     }
 
+    /// Retrieves the registered CSS string for the specified class name, if defined.
+    /// - Parameter name: The class name (with or without leading period).
+    /// - Returns: The merged CSS string if present.
     public func css(for name: String) -> String? {
         let key = name.hasPrefix(".") ? String(name.dropFirst()) : name
         return classes[key]
     }
 
+    /// Resolves a list of class names into a single merged CSS declaration string.
+    /// - Parameter names: Array of class names to resolve in order.
+    /// - Returns: Semicolon-separated CSS declaration string.
     public func resolved(classes names: [String]) -> String {
         names.compactMap { css(for: $0) }.joined(separator: "; ")
     }
 
     // MARK: - CSS File Parsing
 
-    /// Parse a raw CSS string and register all rules.
+    /// Parses a raw CSS stylesheet string, stripping comments and registering all class rules.
+    /// - Parameter cssText: Raw CSS content.
     public func parse(_ cssText: String) {
         // Strip /* ... */ comments
         var text = cssText
@@ -55,21 +69,96 @@ public class CSSStyleSheet {
         }
     }
 
-    /// Load and parse a CSS file from the given bundle (defaults to .main).
-    public func load(named filename: String, bundle: Bundle = .main) {
+    // MARK: - File Loading & Cache
+
+    nonisolated(unsafe) private static var fileCache: [String: String] = [:]
+    nonisolated private static let cacheLock = NSLock()
+
+    /// Clears the in-memory CSS file cache.
+    nonisolated public static func clearCache() {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        fileCache.removeAll()
+    }
+
+    nonisolated private static func getCachedCSS(for key: String) -> String? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        return fileCache[key]
+    }
+
+    nonisolated private static func setCachedCSS(_ text: String, for key: String) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        fileCache[key] = text
+    }
+
+    nonisolated private static func resolveResource(named filename: String, in bundle: Bundle) -> (key: String, url: URL)? {
         let name = (filename as NSString).deletingPathExtension
-        let ext  = (filename as NSString).pathExtension.isEmpty
-                    ? "css"
-                    : (filename as NSString).pathExtension
-        guard
-            let url  = bundle.url(forResource: name, withExtension: ext),
-            let text = try? String(contentsOf: url, encoding: .utf8)
-        else {
+        let ext  = (filename as NSString).pathExtension.isEmpty ? "css" : (filename as NSString).pathExtension
+        guard let url = bundle.url(forResource: name, withExtension: ext) else { return nil }
+        let key = (bundle.bundleIdentifier ?? bundle.bundlePath) + "/" + name + "." + ext
+        return (key, url)
+    }
+
+    /// Loads and parses a CSS file from the given bundle synchronously.
+    /// - Parameters:
+    ///   - filename: Name of the resource file (e.g. `"styles"` or `"styles.css"`).
+    ///   - bundle: The resource bundle where the file is stored (defaults to `.main`).
+    public func load(named filename: String, bundle: Bundle = .main) {
+        guard let resource = Self.resolveResource(named: filename, in: bundle) else {
             #if DEBUG
-            print("CSSStyleSheet: could not load '\(filename)'")
+            print("CSSStyleSheet: could not find '\(filename)'")
             #endif
             return
         }
+
+        if let cached = Self.getCachedCSS(for: resource.key) {
+            parse(cached)
+            return
+        }
+
+        guard let text = try? String(contentsOf: resource.url, encoding: .utf8) else {
+            #if DEBUG
+            print("CSSStyleSheet: could not read '\(filename)'")
+            #endif
+            return
+        }
+
+        Self.setCachedCSS(text, for: resource.key)
+        parse(text)
+    }
+
+    /// Loads and parses a CSS file from the given bundle asynchronously without blocking the main thread.
+    /// - Parameters:
+    ///   - filename: Name of the resource file (e.g. `"styles"` or `"styles.css"`).
+    ///   - bundle: The resource bundle where the file is stored (defaults to `.main`).
+    public func load(named filename: String, bundle: Bundle = .main) async {
+        guard let resource = Self.resolveResource(named: filename, in: bundle) else {
+            #if DEBUG
+            print("CSSStyleSheet: could not find '\(filename)'")
+            #endif
+            return
+        }
+
+        if let cached = Self.getCachedCSS(for: resource.key) {
+            parse(cached)
+            return
+        }
+
+        let fileUrl = resource.url
+        let text = await Task.detached(priority: .userInitiated) {
+            try? String(contentsOf: fileUrl, encoding: .utf8)
+        }.value
+
+        guard let text else {
+            #if DEBUG
+            print("CSSStyleSheet: could not read '\(filename)'")
+            #endif
+            return
+        }
+
+        Self.setCachedCSS(text, for: resource.key)
         parse(text)
     }
 }

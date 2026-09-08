@@ -1,16 +1,24 @@
-// The Swift Programming Language
-// https://docs.swift.org/swift-book
+//
+//  CSSwiftUI.swift
+//  CSSwiftUI
+//
+//  Created by Kevin Launay on 12/02/2026.
+//
 
 import SwiftUI
 
-
+/// A view modifier that loads a CSS stylesheet from a bundle and provides it to the view hierarchy via environment.
 public struct CSSFileModifier: ViewModifier {
     @State private var sheet = CSSStyleSheet()
-    @State private var didLoad = false
-    
     private let filename: String
     private let bundle: Bundle
 
+    /// Initializes the modifier with the specified stylesheet name and bundle.
+    ///
+    /// File loading is deferred to `.task(id:)` to keep view initializers lightweight and avoid main-thread hitches.
+    /// - Parameters:
+    ///   - filename: The name of the CSS file (with or without `.css` extension).
+    ///   - bundle: The resource bundle where the file is stored (defaults to `.main`).
     public init(named filename: String, bundle: Bundle = .main) {
         self.filename = filename
         self.bundle = bundle
@@ -18,23 +26,20 @@ public struct CSSFileModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .task {
-                // @State properties are MainActor-isolated, preventing race conditions
-                guard !didLoad else { return }
-                didLoad = true
-                let s = CSSStyleSheet()
-                s.load(named: filename, bundle: bundle)
-                sheet = s
-            }
             .environment(sheet)
+            .task(id: filename) {
+                await sheet.load(named: filename, bundle: bundle)
+            }
     }
 }
-  
 
+/// A view modifier that resolves one or more CSS class names against the environment stylesheet and applies their styles.
 public struct CSSClassModifier: ViewModifier {
-    @Environment(CSSStyleSheet.self) private var sheet
+    @Environment(CSSStyleSheet.self) private var sheet: CSSStyleSheet?
     let classNames: [String]
 
+    /// Initializes with space-delimited CSS class names (e.g. `"button primary active"`).
+    /// - Parameter names: Space-separated CSS class names.
     public init(_ names: String) {
         classNames = names
             .split(separator: " ")
@@ -42,11 +47,10 @@ public struct CSSClassModifier: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
-        let resolved = sheet.resolved(classes: classNames)
+        let resolved = sheet?.resolved(classes: classNames) ?? ""
         return content.modifier(CssStyleModifier(resolved))
     }
 }
-
 
 private struct SmartImage: View {
     let name: String
@@ -70,10 +74,6 @@ private struct SmartImage: View {
         }
         return false
         #elseif os(watchOS)
-        // On watchOS, we can use SwiftUI's Image(systemName:) which works with SF Symbols
-        // Since we can't check availability at runtime without UIKit/AppKit, we use a heuristic:
-        // assume names with dots are SF Symbols (common pattern like "star.fill", "heart.fill")
-        // Note: This may produce false positives for file names or other dotted strings
         return name.contains(".")
         #else
         return false
@@ -81,12 +81,20 @@ private struct SmartImage: View {
     }
 }
 
-
+/// A view modifier that applies styling parsed from a CSS declaration string or `CSSStyle` struct.
 public struct CssStyleModifier: ViewModifier {
-    let css: CSSStyle
+    public let css: CSSStyle
 
+    /// Initializes with a CSS declaration string.
+    /// - Parameter styleString: A semicolon-separated CSS property declaration string.
     public init(_ styleString: String) {
-        css = CSSStyle(from: styleString)
+        self.css = CSSStyle(from: styleString)
+    }
+
+    /// Initializes directly with a pre-parsed `CSSStyle`.
+    /// - Parameter css: The parsed CSS style.
+    public init(_ css: CSSStyle) {
+        self.css = css
     }
 
     @ViewBuilder
@@ -128,15 +136,26 @@ public struct CssStyleModifier: ViewModifier {
     }
 }
 
+/// Typealias providing conventional casing for `CssStyleModifier`.
+public typealias CSSStyleModifier = CssStyleModifier
+
 public extension View {
+    /// Injects a CSS stylesheet loaded from the specified file into this view's environment.
+    /// - Parameters:
+    ///   - filename: The name of the CSS file.
+    ///   - bundle: The bundle containing the file.
     func cssFile(named filename: String, bundle: Bundle = .main) -> some View {
         modifier(CSSFileModifier(named: filename, bundle: bundle))
     }
     
+    /// Applies CSS class styles resolved from the ambient `CSSStyleSheet`.
+    /// - Parameter names: One or more space-delimited class names.
     func cssClass(_ names: String) -> some View {
         modifier(CSSClassModifier(names))
     }
     
+    /// Applies inline CSS styles to the view.
+    /// - Parameter styleString: Semicolon-delimited CSS rules (e.g. `"color: red; font-weight: bold"`).
     func cssStyle(_ styleString: String) -> some View {
         modifier(CssStyleModifier(styleString))
     }
