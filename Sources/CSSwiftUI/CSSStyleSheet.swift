@@ -71,29 +71,12 @@ public class CSSStyleSheet {
 
     // MARK: - File Loading & Cache
 
-    nonisolated(unsafe) private static var fileCache: [String: String] = [:]
-    nonisolated private static let cacheLock = NSLock()
-
     /// Clears the in-memory CSS file cache.
-    nonisolated public static func clearCache() {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        fileCache.removeAll()
+    public static func clearCache() async {
+        await StylesheetCache.shared.clear()
     }
 
-    nonisolated private static func getCachedCSS(for key: String) -> String? {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        return fileCache[key]
-    }
-
-    nonisolated private static func setCachedCSS(_ text: String, for key: String) {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-        fileCache[key] = text
-    }
-
-    nonisolated private static func resolveResource(named filename: String, in bundle: Bundle) -> (key: String, url: URL)? {
+    private static func resolveResource(named filename: String, in bundle: Bundle) -> (key: String, url: URL)? {
         let name = (filename as NSString).deletingPathExtension
         let ext  = (filename as NSString).pathExtension.isEmpty ? "css" : (filename as NSString).pathExtension
         guard let url = bundle.url(forResource: name, withExtension: ext) else { return nil }
@@ -113,11 +96,6 @@ public class CSSStyleSheet {
             return
         }
 
-        if let cached = Self.getCachedCSS(for: resource.key) {
-            parse(cached)
-            return
-        }
-
         guard let text = try? String(contentsOf: resource.url, encoding: .utf8) else {
             #if DEBUG
             print("CSSStyleSheet: could not read '\(filename)'")
@@ -125,7 +103,9 @@ public class CSSStyleSheet {
             return
         }
 
-        Self.setCachedCSS(text, for: resource.key)
+        Task {
+            await StylesheetCache.shared.set(text, for: resource.key)
+        }
         parse(text)
     }
 
@@ -141,7 +121,7 @@ public class CSSStyleSheet {
             return
         }
 
-        if let cached = Self.getCachedCSS(for: resource.key) {
+        if let cached = await StylesheetCache.shared.get(resource.key) {
             parse(cached)
             return
         }
@@ -158,7 +138,25 @@ public class CSSStyleSheet {
             return
         }
 
-        Self.setCachedCSS(text, for: resource.key)
+        await StylesheetCache.shared.set(text, for: resource.key)
         parse(text)
+    }
+}
+
+/// An actor managing thread-safe in-memory caching of loaded stylesheet content.
+private actor StylesheetCache {
+    static let shared = StylesheetCache()
+    private var cache: [String: String] = [:]
+
+    func get(_ key: String) -> String? {
+        cache[key]
+    }
+
+    func set(_ text: String, for key: String) {
+        cache[key] = text
+    }
+
+    func clear() {
+        cache.removeAll()
     }
 }
