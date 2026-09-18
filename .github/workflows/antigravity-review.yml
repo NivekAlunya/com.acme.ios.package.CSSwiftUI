@@ -33,6 +33,13 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # 0. Verify API Key presence
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::warning ::Neither GEMINI_API_KEY nor ANTIGRAVITY_API_KEY secret is configured in this repository."
+            echo "To enable automated PR reviews, add GEMINI_API_KEY (or ANTIGRAVITY_API_KEY) under Repository Settings -> Secrets and variables -> Actions."
+            exit 0
+          fi
+
           # 1. Compute git diff against target branch
           git diff "$PR_BASE...HEAD" > pr_diff.patch
 

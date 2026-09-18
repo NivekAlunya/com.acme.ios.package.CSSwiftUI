@@ -169,8 +169,8 @@ struct CSSStyleSheetTests {
     }
 
     @Test("Cache management and lightweight modifier initialization")
-    func testCacheAndModifier() {
-        CSSStyleSheet.clearCache()
+    func testCacheAndModifier() async {
+        await CSSStyleSheet.clearCache()
         
         // Ensure CSSFileModifier initializes without triggering disk I/O or crashing
         let modifier = CSSFileModifier(named: "non_existent_file")
@@ -179,7 +179,7 @@ struct CSSStyleSheetTests {
 
     @Test("Async loading gracefully handles missing resources and clears cache")
     func testAsyncLoading() async {
-        CSSStyleSheet.clearCache()
+        await CSSStyleSheet.clearCache()
         let sheet = CSSStyleSheet()
         await sheet.load(named: "missing_stylesheet")
         #expect(sheet.css(for: "anything") == nil)
